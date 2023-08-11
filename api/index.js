@@ -1,6 +1,9 @@
 const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
+const bcrypt = require("bcryptjs");
+const cookieParser = require("cookie-parser");
+const jwt = require("jsonwebtoken");
 const app = express();
 
 const port = 5000;
@@ -11,16 +14,22 @@ const User = require("./models/User");
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+//Middleware cookieParser
+app.use(cookieParser());
+
 //Config dotenv
 dotenv.config();
 
 const client_url = process.env.CLIENT_URL;
 const db_url = process.env.DB_URL;
+const salt = bcrypt.genSaltSync(10);
+const jwt_secret = process.env.JWT_SECRET;
 
 //Middleware cors
 app.use(
   cors({
     origin: client_url,
+    credentials: true,
   })
 );
 
@@ -32,19 +41,27 @@ app.get("/", (req, res) => {
 });
 
 app.get("/profile", (req, res) => {
-  res.json("profile");
+  const token = req.cookies?.token;
+
+  if (token) {
+    jwt.verify(token, jwt_secret, {}, (err, userData) => {
+      if (err) throw err;
+      res.json(userData);
+    });
+  }
 });
 
-app.post("/register", (req, res) => {
+app.post("/register", async (req, res) => {
   const { username, password } = req.body;
 
-  User.create({ username, password })
-    .then((userData) => {
-      res.json(userData);
-    })
-    .catch((err) => {
-      console.log(err);
-    });
+  const hashPassword = bcrypt.hashSync(password, salt);
+
+  const user = await User.create({ username, password: hashPassword });
+
+  jwt.sign({ userId: user._id, username }, jwt_secret, {}, (err, token) => {
+    if (err) throw err;
+    res.cookie("token", token).json(user);
+  });
 });
 
 app.post("/login", async (req, res) => {
@@ -52,12 +69,14 @@ app.post("/login", async (req, res) => {
 
   const user = await User.findOne({ username });
 
-  if (!user) {
-    res.json("Tai khoan khong ton tai.");
-  } else if (user.password === password) {
-    res.json(user);
-  } else {
-    res.json("Mat khau khong dung.");
+  if (user) {
+    const comparePassword = bcrypt.compareSync(password, user.password);
+    if (comparePassword) {
+      jwt.sign({ userId: user._id, username }, jwt_secret, {}, (err, token) => {
+        if (err) throw err;
+        res.cookie("token", token).json(user);
+      });
+    }
   }
 });
 

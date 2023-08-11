@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { UserContext } from "./Context";
 import axios from "axios";
 
@@ -9,6 +9,17 @@ function LoginOrRegister() {
     const [isLoginOrRegister, setIsLoginOrRegister] = useState("login");
 
     const { setUserId, setNewUsername } = useContext(UserContext);
+
+    useEffect(() => {
+        axios.get("/profile")
+            .then(res => {
+                setUserId(res.data.userId);
+                setNewUsername(res.data.username);
+            })
+            .catch(err => {
+                console.log(err);
+            })
+    }, [setNewUsername, setUserId]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
