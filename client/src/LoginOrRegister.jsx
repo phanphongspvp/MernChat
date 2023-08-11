@@ -1,5 +1,6 @@
 import { useContext, useState } from "react";
 import { UserContext } from "./Context";
+import axios from "axios";
 
 function LoginOrRegister() {
 
@@ -7,13 +8,18 @@ function LoginOrRegister() {
     const [password, setPassword] = useState("");
     const [isLoginOrRegister, setIsLoginOrRegister] = useState("login");
 
-    const { setNewUsername } = useContext(UserContext);
+    const { setUserId, setNewUsername } = useContext(UserContext);
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        setNewUsername(username);
+        axios.post(isLoginOrRegister, {username, password}).then(res => {
+            setUserId(res.data._id);
+            setNewUsername(res.data.username);
+        }).catch(err => {
+            console.log(err)
+        });
     }
-
+    
     return ( 
         <div className="bg-blue-50 w-full h-screen flex justify-center">
             <div className="w-72 mt-48 text-center">

@@ -6,9 +6,9 @@ import { UserContext } from "./Context";
 
 function Router() {
 
-    const { newUsername } = useContext(UserContext);
+    const { userId, newUsername } = useContext(UserContext);
 
-    if(newUsername) {
+    if(userId && newUsername) {
         return <Chat />
     }
 
