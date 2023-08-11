@@ -1,16 +1,40 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
+import { UserContext } from "./Context";
 
 function LoginOrRegister() {
 
+    const [username, setUsername] = useState("");
+    const [password, setPassword] = useState("");
     const [isLoginOrRegister, setIsLoginOrRegister] = useState("login");
+
+    const { setNewUsername } = useContext(UserContext);
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        setNewUsername(username);
+    }
 
     return ( 
         <div className="bg-blue-50 w-full h-screen flex justify-center">
             <div className="w-72 mt-48 text-center">
                 <h1 className="text-3xl uppercase font-bold text-blue-500 mb-3">Mern Chat</h1>
-                <form className="flex flex-col">
-                    <input type="text" placeholder="Tài khoản" className="p-2 my-1.5 border rounded-sm outline-none" />
-                    <input type="text" placeholder="Mật khẩu" className="p-2 my-1.5 border rounded-sm outline-none" />
+                <form className="flex flex-col" onSubmit={handleSubmit}>
+                    <input 
+                        type="text" 
+                        value={username}
+                        placeholder="Tài khoản" 
+                        className="p-2 my-1.5 border rounded-sm outline-none" 
+                        onChange={(e) => setUsername(e.target.value)}
+                        required
+                    />
+                    <input 
+                        type="password"
+                        value={password}
+                        placeholder="Mật khẩu" 
+                        className="p-2 my-1.5 border rounded-sm outline-none"
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                    />
                     <button type="submit" className="bg-blue-500 text-white p-2 mt-1.5 rounded-sm">
                         {isLoginOrRegister === "login" ? "Đăng nhập" : "Đăng kí"}
                     </button>
