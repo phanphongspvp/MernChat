@@ -6,13 +6,13 @@ import Avatar from "./Avatar";
 
 function Chat() {
 
-    const { userId, newUsername } = useContext(UserContext);
+    const { userId, setUserId, newUsername, setNewUsername } = useContext(UserContext);
 
 
     const [chat, setChat] = useState("");
-    const [newChat, setNewChat] = useState("");
+    const [chats, setChats] = useState([]);
     const [isChat, setIsChat] = useState(false);
-    const [userData, setUserData] = useState([]);
+    const [ws, setWs] = useState(null);
     const [userOnline, setUserOnline] = useState([]);
     const [userOffline, setUserOffline] = useState([]);
     const [selectId, setSelectId] = useState(null);
@@ -22,11 +22,11 @@ function Chat() {
         if (chatScroll.current) {
           chatScroll.current.scrollIntoView({ behavior: "smooth", block: "end" });
         }
-    }, [newChat]);
+    }, [chats]);
 
     useEffect(() => {
         connectWs();
-    }, []);
+    }, [selectId]);
 
     
     useEffect(() => {
@@ -40,19 +40,41 @@ function Chat() {
             })
     }, [userOnline]);
 
+    useEffect(() => {
+        if(selectId){
+            axios.get("/chats/" + selectId)
+            .then(res => {
+                setChats(res.data);
+            })
+            .catch((error) => {
+                console.error("Có lỗi trong quá trình lấy dữ liệu: ", error);
+            })
+        }
+    }, [selectId]);
+
     const connectWs = () => {
         const ws = new WebSocket("ws://localhost:5000");
+        setWs(ws);
 
         ws.addEventListener("message", handleMessage);
+        ws.addEventListener("close", () => {
+            setTimeout(() => {
+                console.log("again connected");
+                connectWs();
+            }, 1000);
+        })
     }
 
     const handleMessage = (e) => {
         const messageData = JSON.parse(e.data);
         if("online" in messageData) {
-            console.log(messageData.online);
             const wsUserOnline = _.uniqBy(messageData.online, "userId");
             setUserOnline(wsUserOnline)
-        } 
+        }else if ("text" in messageData) {
+            if(messageData.sender === selectId) {
+                setChats(pre => [...pre, {...messageData}])
+            }
+        }
     }
 
     const handleChat = (id) => {
@@ -63,8 +85,27 @@ function Chat() {
     const handleSubmit = (e) => {
         e.preventDefault();
         setChat("");
-        setNewChat(chat);
+        ws.send(JSON.stringify({
+            recipient: selectId,
+            text: chat
+        }))
+        setChats(pre => ([...pre, {
+            text: chat,
+            sender: userId,
+            recipient: selectId,
+            _id: Date.now(),
+        }]))
     }
+
+    const handleLogout = () => {
+        axios.post("/logout").then(() => {
+            setWs(null);
+            setUserId(null);
+            setNewUsername(null);
+        })
+    }
+
+    const userOnlineExclPrgPeople = [...userOnline].filter((item) => item.userId !== userId);
 
     return (
         <div className="flex w-full h-screen">
@@ -72,7 +113,7 @@ function Chat() {
                 <div className="flex-grow">
                     <div className="border-b h-12 bg-blue-600 flex items-center text-white pl-6 font-semibold">Mern Chat</div>
                     {/* Hiển thị ra người dùng online */}
-                    {userOnline.map((user) => (
+                    {userOnlineExclPrgPeople.map((user) => (
                         <div 
                             key={user.userId} 
                             className={`border-b h-14 flex items-center pl-4 cursor-pointer ${selectId === user.userId ? "bg-blue-200" : ""}`} 
@@ -101,7 +142,7 @@ function Chat() {
                         </svg>
                         {newUsername}
                     </div>
-                    <button className="ml-2 bg-gray-600 text-white px-2 py-1 rounded-sm">Đăng xuất</button>
+                    <button className="ml-2 bg-gray-600 text-white px-2 py-1 rounded-sm" onClick={handleLogout}>Đăng xuất</button>
                 </div>
             </div>
             {!isChat && (
@@ -112,15 +153,11 @@ function Chat() {
             {isChat && (
                 <div className="w-2/3 bg-blue-100 flex flex-col">
                     <div className="flex-grow overflow-y-scroll">
-                    {/* {chats.map((chat) => {
-                        if(chat.sender === selectId) {
-                            return (
-                                <div key={chat._id} className={chat.sender === selectId ? "text-right": "text-left"} ref={chatScroll}>
-                                    <p className="bg-blue-600 text-white p-1 m-2 rounded-lg inline-block">{chat.text}</p>
-                                </div>
-                            )
-                        }
-                    })} */}
+                        {chats.map((chat) => (
+                            <div key={chat._id} className={userId === chat.sender ? "text-right" : "text-left"} ref={chatScroll}>
+                                <p className="bg-blue-600 text-white p-2 m-2 rounded-xl inline-block">{chat.text}</p>
+                            </div>
+                        ))}
                     </div>
                     <form className="flex m-2 gap-2" onSubmit={handleSubmit}>
                         <input 

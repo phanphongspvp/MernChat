@@ -27,6 +27,20 @@ const db_url = process.env.DB_URL;
 const salt = bcrypt.genSaltSync(10);
 const jwt_secret = process.env.JWT_SECRET;
 
+const getUserDataFromRequest = (req) => {
+  return new Promise((resolve, reject) => {
+    const token = req.cookies?.token;
+    if (token) {
+      jwt.verify(token, jwt_secret, {}, (err, userData) => {
+        if (err) throw err;
+        resolve(userData);
+      });
+    } else {
+      reject("no token");
+    }
+  });
+};
+
 //Middleware cors
 app.use(
   cors({
@@ -65,9 +79,18 @@ app.get("/users", async (req, res) => {
   }
 });
 
-app.get("/chats", async (req, res) => {
+app.get("/chats/:userId", async (req, res) => {
   try {
-    const chatData = await Chat.find({});
+    const { userId } = req.params;
+    const userData = await getUserDataFromRequest(req);
+    const ourUserId = userData.userId;
+
+    const chatData = await Chat.find({
+      $or: [
+        { sender: userId, recipient: ourUserId },
+        { sender: ourUserId, recipient: userId },
+      ],
+    });
     res.json(chatData);
   } catch (error) {
     console.log(err);
@@ -106,6 +129,10 @@ app.post("/login", async (req, res) => {
   }
 });
 
+app.post("/logout", (req, res) => {
+  res.cookie("token", "").json("ok");
+});
+
 const server = app.listen(port, () => {
   console.log("App listening on port:", port);
 });
@@ -113,8 +140,6 @@ const server = app.listen(port, () => {
 const wss = new ws.Server({ server });
 
 wss.on("connection", (ws, req) => {
-  console.log("connected");
-
   const notifyAboutOnlinePeople = () => {
     const onlineUsers = [];
 
@@ -134,6 +159,23 @@ wss.on("connection", (ws, req) => {
     });
   };
 
+  ws.isAlive = true;
+
+  ws.timer = setInterval(() => {
+    ws.ping();
+    ws.deathTimer = setTimeout(() => {
+      ws.isAlive = false;
+      clearInterval(ws.timer);
+      ws.terminate();
+      notifyAboutOnlinePeople();
+      console.log("dead");
+    }, 1000);
+  }, 5000);
+
+  ws.on("pong", () => {
+    clearTimeout(ws.deathTimer);
+  });
+
   const cookies = req.headers?.cookie;
 
   if (cookies) {
@@ -149,6 +191,37 @@ wss.on("connection", (ws, req) => {
       });
     }
   }
+
+  ws.on("message", async (message) => {
+    const bufferMessage = Buffer.from(message);
+
+    const stringMessage = bufferMessage.toString("utf8");
+
+    const objMessage = JSON.parse(stringMessage);
+
+    const { recipient, text } = objMessage;
+
+    if (recipient && text) {
+      const messageDoc = await Chat.create({
+        sender: ws.userId,
+        recipient,
+        text,
+      });
+
+      [...wss.clients]
+        .filter((c) => c.userId === recipient)
+        .forEach((c) =>
+          c.send(
+            JSON.stringify({
+              text,
+              sender: ws.userId,
+              recipient,
+              _id: messageDoc._id,
+            })
+          )
+        );
+    }
+  });
 
   notifyAboutOnlinePeople();
 });
